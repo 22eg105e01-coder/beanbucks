@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeanBucks Admin</title>
+<style>
+  body { margin:0; font-family:-apple-system,Segoe UI,sans-serif; background:#f5ede3; color:#3b2416; }
+  header { background:#3b2416; color:#f5ede3; padding:16px 24px; font-size:22px; font-weight:700; }
+  main { max-width:1000px; margin:0 auto; padding:16px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+  .stat { background:#fff; border-radius:14px; padding:14px; box-shadow:0 2px 8px rgba(59,36,22,.12); }
+  .stat b { display:block; font-size:26px; }
+  .stat span { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:#8a5a3b; }
+  .card { background:#fff; border-radius:14px; padding:16px; margin-bottom:16px; overflow-x:auto; box-shadow:0 2px 8px rgba(59,36,22,.12); }
+  h2 { margin:0 0 10px; font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:#8a5a3b; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid #eadccb; }
+  th { color:#8a5a3b; }
+</style>
+</head>
+<body>
+<header>☕ BeanBucks Admin</header>
+<main>
+  <div class="stats" id="stats"></div>
+  <div class="card"><h2>Customers</h2><table id="customers"></table></div>
+  <div class="card"><h2>Ledger (newest first)</h2><table id="transactions"></table></div>
+  <div class="card"><h2>Vouchers</h2><table id="vouchers"></table></div>
+</main>
+<script>
+const get = p => fetch('/api/admin' + p).then(r => r.json());
+const money = n => '₹' + Number(n).toFixed(2);
+
+function table(el, head, rows) {
+  document.getElementById(el).innerHTML =
+    '<tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr>' +
+    (rows.length ? rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('')
+                 : '<tr><td colspan="' + head.length + '">Nothing yet</td></tr>');
+}
+
+async function load() {
+  const [s, c, t, v] = await Promise.all([get('/summary'), get('/customers'), get('/transactions'), get('/vouchers')]);
+
+  document.getElementById('stats').innerHTML = [
+    ['Customers', s.customers],
+    ['Top-ups', money(s.totalTopUps)],
+    ['Sales', money(s.totalSales)],
+    ['Vouchers issued', s.vouchersIssued],
+    ['Redeemed', s.vouchersRedeemed]
+  ].map(([l, n]) => '<div class="stat"><b>' + n + '</b><span>' + l + '</span></div>').join('');
+
+  table('customers', ['ID', 'Name', 'Balance', 'Stars'],
+    c.map(x => [x.id, x.name, money(x.balance), x.stars]));
+  table('transactions', ['Time', 'Customer', 'Type', 'Amount'],
+    t.map(x => [x.createdAt.replace('T', ' ').slice(0, 19), x.customer.name, x.type, money(x.amount)]));
+  table('vouchers', ['Code', 'Customer ID', 'Used?'],
+    v.map(x => [x.code, x.customer.id, x.redeemed ? 'Yes' : 'No']));
+}
+
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

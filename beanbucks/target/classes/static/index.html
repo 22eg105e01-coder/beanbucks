@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeanBucks</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, Segoe UI, sans-serif; background:#f5ede3; color:#3b2416; }
+  header { background:#3b2416; color:#f5ede3; padding:18px; text-align:center; font-size:24px; font-weight:700; }
+  main { max-width:520px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 2px 8px rgba(59,36,22,.12); }
+  h2 { margin:0 0 12px; font-size:16px; text-transform:uppercase; letter-spacing:.06em; color:#8a5a3b; }
+  .balance { font-size:38px; font-weight:800; }
+  .bar { background:#eadccb; border-radius:10px; height:14px; overflow:hidden; margin:8px 0; }
+  .bar div { background:#c8782f; height:100%; width:0; transition:width .4s; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button { font:inherit; border:0; border-radius:12px; padding:12px; background:#6f4e37; color:#fff; cursor:pointer; }
+  button:hover { background:#8a5a3b; }
+  button.alt { background:#e4d3bf; color:#3b2416; }
+  .drink span { display:block; font-size:13px; opacity:.85; }
+  input { font:inherit; padding:12px; border-radius:12px; border:1px solid #d6c3ad; width:100%; margin-bottom:10px; }
+  .voucher { background:#fff4d6; border:2px dashed #c8782f; border-radius:10px; padding:10px; margin-top:8px; font-weight:700; letter-spacing:.05em; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#3b2416; color:#fff; padding:12px 18px; border-radius:12px; display:none; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>☕ BeanBucks</header>
+<main>
+f
+  <!-- Sign up -->
+  <div id="signup" class="card">
+    <h2>Join BeanBucks</h2>
+    <input id="nameInput" placeholder="Your name">
+    <button onclick="signUp()" style="width:100%">Get my card</button>
+  </div>
+
+  <!-- App -->
+  <div id="app" class="hidden">
+    <div class="card">
+      <h2 id="hello"></h2>
+      <div class="balance" id="balance"></div>
+      <div class="bar"><div id="bar"></div></div>
+      <div id="starsText"></div>
+    </div>
+
+    <div class="card">
+      <h2>Top up</h2>
+      <div class="grid">
+        <button class="alt" onclick="topUp(100)">+ ₹100</button>
+        <button class="alt" onclick="topUp(500)">+ ₹500</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Menu</h2>
+      <div class="grid" id="menu"></div>
+    </div>
+
+    <div class="card">
+      <h2>My vouchers</h2>
+      <div id="vouchers"></div>
+    </div>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+const API = '/api/customers';
+const STARS_PER_VOUCHER = 20;
+const MENU = [
+  ['Espresso', 120], ['Cappuccino', 160], ['Latte', 180],
+  ['Cold Brew', 200], ['Mocha', 220], ['Croissant', 90]
+];
+let id = localStorage.getItem('beanId');
+let customer = null;
+let voucherCount = 0;
+
+async function call(path, method = 'GET', body) {
+  const res = await fetch(API + path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) throw new Error('Request failed');
+  return res.json();
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+
+async function signUp() {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) return toast('Enter your name');
+  const c = await call('', 'POST', { name });
+  id = c.id;
+  localStorage.setItem('beanId', id);
+  refresh();
+}
+
+async function refresh() {
+  try {
+    customer = await call('/' + id);
+    const v = await call('/' + id + '/vouchers');
+    render(v);
+  } catch (e) {
+    // app was restarted (in-memory DB wiped) or first visit
+    localStorage.removeItem('beanId');
+    document.getElementById('signup').classList.remove('hidden');
+    document.getElementById('app').classList.add('hidden');
+  }
+}
+
+function render(v) {
+  document.getElementById('signup').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('hello').textContent = 'Hi, ' + customer.name;
+  document.getElementById('balance').textContent = '₹' + Number(customer.balance).toFixed(2);
+  document.getElementById('bar').style.width = (customer.stars / STARS_PER_VOUCHER * 100) + '%';
+  document.getElementById('starsText').textContent =
+    '⭐ ' + customer.stars + ' / ' + STARS_PER_VOUCHER + ' stars to your next free coffee';
+  document.getElementById('vouchers').innerHTML = v.length
+    ? v.map(x => '<div class="voucher">🎟 ' + x.code + (x.redeemed ? ' (used)' : '') + '</div>').join('')
+    : '<span style="opacity:.6">No vouchers yet. Keep sipping!</span>';
+  voucherCount = v.length;
+}
+
+function buildMenu() {
+  document.getElementById('menu').innerHTML = MENU.map(([n, p]) =>
+    '<button class="drink" onclick="buy(' + p + ',\'' + n + '\')">' + n + '<span>₹' + p + '</span></button>'
+  ).join('');
+}
+
+async function topUp(amount) {
+  await call('/' + id + '/topup', 'POST', { amount });
+  toast('Added ₹' + amount);
+  refresh();
+}
+
+async function buy(price, name) {
+  if (Number(customer.balance) < price) return toast('Not enough balance. Top up first!');
+  const before = voucherCount;
+  await call('/' + id + '/purchase', 'POST', { amount: price });
+  const v = await call('/' + id + '/vouchers');
+  toast(v.length > before ? '🎉 You earned a free coffee voucher!' : 'Enjoy your ' + name + '!');
+  refresh();
+}
+
+buildMenu();
+if (id) refresh();
+</script>
+</body>
+</html>
